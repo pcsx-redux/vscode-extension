@@ -16,7 +16,6 @@ const octokit = new Octokit()
 const os = require('node:os')
 
 const mipsVersion = '16.2.0'
-let extensionUri
 let globalStorageUri
 let requiresReboot = false
 
@@ -97,21 +96,10 @@ async function installToolchain() {
             'mipsel-none-elf-gcc'
           ])
         } else if (await checkInstalled('brew')) {
-          const binutilsScriptPath = vscode.Uri.joinPath(
-            extensionUri,
-            'scripts',
-            'mipsel-none-elf-binutils.rb'
-          ).fsPath
-          const gccScriptPath = vscode.Uri.joinPath(
-            extensionUri,
-            'scripts',
-            'mipsel-none-elf-gcc.rb'
-          ).fsPath
-          await terminal.run('brew', ['install', 'nikitabobko/tap/brew-install-path'])
           await terminal.run('brew', [
-            'install-path',
-            binutilsScriptPath,
-            gccScriptPath
+            'install',
+            'pcsx-redux/mips/mipsel-none-elf-binutils',
+            'pcsx-redux/mips/mipsel-none-elf-gcc'
           ])
         } else {
           vscode.window.showErrorMessage(
@@ -129,21 +117,10 @@ async function installToolchain() {
     case 'darwin':
       try {
         if (await checkInstalled('brew')) {
-          const binutilsScriptPath = vscode.Uri.joinPath(
-            extensionUri,
-            'scripts',
-            'mipsel-none-elf-binutils.rb'
-          ).fsPath
-          const gccScriptPath = vscode.Uri.joinPath(
-            extensionUri,
-            'scripts',
-            'mipsel-none-elf-gcc.rb'
-          ).fsPath
-          await terminal.run('brew', ['install', 'nikitabobko/tap/brew-install-path'])
           await terminal.run('brew', [
-            'install-path',
-            binutilsScriptPath,
-            gccScriptPath
+            'install',
+            'pcsx-redux/mips/mipsel-none-elf-binutils',
+            'pcsx-redux/mips/mipsel-none-elf-gcc'
           ])
         } else {
           await terminal.run('/bin/bash', [
@@ -779,10 +756,6 @@ exports.refreshAll = async () => {
 }
 
 exports.list = tools
-
-exports.setExtensionUri = (uri) => {
-  extensionUri = uri
-}
 
 exports.setGlobalStorageUri = (uri) => {
   globalStorageUri = uri
