@@ -42,44 +42,72 @@ async function checkCommands(commands, args) {
   return (await findCommand(commands, args)) !== null
 }
 
-let mipsInstalling = false
-let win32MipsToolsInstalling = false
+// Windows gets the same prebuilt archives mips.ps1 installs, unpacked under the
+// extension's own storage, and psxDev.toolchainPath pointing at them. Its bin/
+// directory is put on PATH for the extension host and for every terminal and
+// task VS Code starts, so nothing needs to edit the user's PATH or reboot.
+const mipsGdbVersion = '17.2'
+const mipsBaseURL = 'https://static.grumpycoder.net/pixel/mips/'
+const gdbBaseURL = 'https://static.grumpycoder.net/pixel/gdb-multiarch-windows/'
+let environmentCollection
+let appliedToolchainBin
+let win32ToolchainInstall
 
-async function installMips() {
-  if (mipsInstalling) return
-  mipsInstalling = true
-  try {
-    // Go through cmd rather than launching powershell as the shell: the string
-    // after /c is then byte for byte the one the README tells people to paste,
-    // and powershell's own argument tokenizer never gets a say in how the block
-    // is quoted. Same reason the mips install calls below are wrapped.
-    await terminal.run('cmd', [
-      '/c',
-      'powershell -c "& { iwr -UseBasicParsing https://raw.githubusercontent.com/grumpycoders/pcsx-redux/main/mips.ps1 | iex }"'
-    ])
-    requiresReboot = true
-    vscode.window.showInformationMessage(
-      'Installing the MIPS tool requires a reboot. Please reboot your computer before proceeding further.'
-    )
-  } catch (error) {
-    vscode.window.showErrorMessage(
-      'An error occurred while installing the MIPS toolchain. Please install it manually.'
-    )
-    throw error
+function toolchainBin() {
+  const root = vscode.workspace.getConfiguration('psxDev').get('toolchainPath')
+  return root ? path.join(root, 'bin') : undefined
+}
+
+function applyToolchainPath() {
+  const bin = toolchainBin()
+  if (bin === appliedToolchainBin) return
+  const entries = (process.env.PATH || '')
+    .split(path.delimiter)
+    .filter((entry) => entry !== appliedToolchainBin)
+  if (bin) entries.unshift(bin)
+  process.env.PATH = entries.join(path.delimiter)
+  if (environmentCollection) {
+    environmentCollection.delete('PATH')
+    if (bin) environmentCollection.prepend('PATH', bin + path.delimiter)
   }
+  appliedToolchainBin = bin
+  for (const name of ['toolchain', 'gdb', 'make']) tools[name].installed = undefined
+}
+
+async function installWin32Toolchain() {
+  if (!win32ToolchainInstall) {
+    win32ToolchainInstall = (async () => {
+      const root = vscode.Uri.joinPath(
+        globalStorageUri,
+        'mips',
+        mipsVersion
+      ).fsPath
+      await downloader.downloadFile(
+        mipsBaseURL + 'g++-mipsel-none-elf-' + mipsVersion + '.zip',
+        root,
+        true
+      )
+      await downloader.downloadFile(
+        gdbBaseURL + 'gdb-multiarch-' + mipsGdbVersion + '.zip',
+        root,
+        true
+      )
+      await vscode.workspace
+        .getConfiguration('psxDev')
+        .update('toolchainPath', root, vscode.ConfigurationTarget.Global)
+      applyToolchainPath()
+    })().finally(() => {
+      win32ToolchainInstall = undefined
+    })
+  }
+  return win32ToolchainInstall
 }
 
 async function installToolchain() {
   switch (process.platform) {
     case 'win32':
       try {
-        if (!(await checkInstalled('mips'))) {
-          await installMips()
-        } else {
-          if (win32MipsToolsInstalling) return
-          win32MipsToolsInstalling = true
-          await terminal.run('cmd', ['/c', `mips install ${mipsVersion}`])
-        }
+        await installWin32Toolchain()
       } catch (error) {
         vscode.window.showErrorMessage(
           'An error occurred while installing the MIPS toolchain. Please install it manually.'
@@ -151,13 +179,7 @@ async function installGDB() {
   switch (process.platform) {
     case 'win32':
       try {
-        if (!(await checkInstalled('mips'))) {
-          await installMips()
-        } else {
-          if (win32MipsToolsInstalling) return
-          win32MipsToolsInstalling = true
-          await terminal.run('cmd', ['/c', `mips install ${mipsVersion}`])
-        }
+        await installWin32Toolchain()
       } catch (error) {
         vscode.window.showErrorMessage(
           'An error occurred while installing GDB Multiarch. Please install it manually.'
@@ -221,13 +243,7 @@ async function installMake() {
   switch (process.platform) {
     case 'win32':
       try {
-        if (!(await checkInstalled('mips'))) {
-          await installMips()
-        } else {
-          if (win32MipsToolsInstalling) return
-          win32MipsToolsInstalling = true
-          await terminal.run('cmd', ['/c', `mips install ${mipsVersion}`])
-        }
+        await installWin32Toolchain()
       } catch (error) {
         vscode.window.showErrorMessage(
           'An error occurred while installing GNU Make. Please install it manually.'
@@ -587,11 +603,6 @@ function unpackPsyq(destination) {
 }
 
 const tools = {
-  mips: {
-    type: 'internal',
-    install: installMips,
-    check: () => checkCommands(['mips'], ['--version'])
-  },
   apt: {
     type: 'internal',
     check: () => checkCommands(['apt-get'], ['--version'])
@@ -761,6 +772,13 @@ exports.setGlobalStorageUri = (uri) => {
   globalStorageUri = uri
 }
 
+// Called once at activation with the extension's environment variable collection,
+// and again whenever psxDev.toolchainPath changes.
+exports.applyToolchainPath = (collection) => {
+  if (collection) environmentCollection = collection
+  applyToolchainPath()
+}
+
 exports.findPython = findPython
 
 exports.install = async (toInstall, force) => {
@@ -785,16 +803,13 @@ exports.install = async (toInstall, force) => {
       )
     }
   }
-  win32MipsToolsInstalling = false
   return requiresReboot
 }
 
 exports.maybeInstall = async (toInstall) => {
   const installed = await checkInstalled(toInstall)
   if (!installed && !requiresReboot) {
-    const ret = exports.install([toInstall])
-    win32MipsToolsInstalling = false
-    return ret
+    return exports.install([toInstall])
   }
   return requiresReboot
 }

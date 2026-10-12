@@ -31,6 +31,11 @@
           "type": "string",
           "default": "xmake",
           "description": "Path to the xmake binary. Left as-is, xmake is looked up in your PATH. Installing xmake from the PSX.Dev panel drops a standalone copy next to the emulator and points this at it."
+        },
+        "psxDev.toolchainPath": {
+          "type": "string",
+          "default": "",
+          "description": "Root of a MIPS toolchain whose bin directory is put first on PATH for VS Code's terminals and tasks. Left empty, the toolchain is looked up in your PATH. Installing the toolchain from the PSX.Dev panel on Windows unpacks it under the extension's storage and points this at it."
         }
       }
     },
