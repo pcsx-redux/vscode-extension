@@ -50,7 +50,12 @@ const mipsGdbVersion = '17.2'
 const mipsBaseURL = 'https://static.grumpycoder.net/pixel/mips/'
 const gdbBaseURL = 'https://static.grumpycoder.net/pixel/gdb-multiarch-windows/'
 let environmentCollection
-let appliedToolchainBin
+// null until the first call, so activation always rewrites the collection: VS Code
+// persists it across reloads, and the setting may have changed in between.
+let appliedToolchainBin = null
+// Whether process.env.PATH holds an entry this extension put there. A bin that was
+// already on the user's PATH is left alone in both directions.
+let addedToolchainBin = false
 let win32ToolchainInstall
 
 function toolchainBin() {
@@ -61,10 +66,13 @@ function toolchainBin() {
 function applyToolchainPath() {
   const bin = toolchainBin()
   if (bin === appliedToolchainBin) return
-  const entries = (process.env.PATH || '')
-    .split(path.delimiter)
-    .filter((entry) => entry !== appliedToolchainBin)
-  if (bin) entries.unshift(bin)
+  const entries = (process.env.PATH || '').split(path.delimiter)
+  if (addedToolchainBin) {
+    const index = entries.indexOf(appliedToolchainBin)
+    if (index !== -1) entries.splice(index, 1)
+  }
+  addedToolchainBin = !!bin && !entries.includes(bin)
+  if (addedToolchainBin) entries.unshift(bin)
   process.env.PATH = entries.join(path.delimiter)
   if (environmentCollection) {
     environmentCollection.delete('PATH')
@@ -72,6 +80,18 @@ function applyToolchainPath() {
   }
   appliedToolchainBin = bin
   for (const name of ['toolchain', 'gdb', 'make']) tools[name].installed = undefined
+}
+
+// Write the setting where toolchainBin() reads it: a workspace value shadows the
+// global one, so updating only the global value would leave it unused.
+async function setToolchainPath(root) {
+  const config = vscode.workspace.getConfiguration('psxDev')
+  const current = config.inspect('toolchainPath') || {}
+  const target =
+    current.workspaceValue !== undefined
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global
+  await config.update('toolchainPath', root, target)
 }
 
 async function installWin32Toolchain() {
@@ -92,9 +112,7 @@ async function installWin32Toolchain() {
         root,
         true
       )
-      await vscode.workspace
-        .getConfiguration('psxDev')
-        .update('toolchainPath', root, vscode.ConfigurationTarget.Global)
+      await setToolchainPath(root)
       applyToolchainPath()
     })().finally(() => {
       win32ToolchainInstall = undefined
