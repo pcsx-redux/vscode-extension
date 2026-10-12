@@ -18,6 +18,8 @@ The panel will have the ability to install the tools on the most popular platfor
 
 ### Changelog
 
+- Unreleased
+  - Windows: the MIPS toolchain, GDB and make are unpacked into the extension's storage and put on PATH for VS Code's terminals and tasks through the new `psxDev.toolchainPath` setting. No reboot and no `mips.ps1` bootstrap.
 - 0.6.0
   - Added xmake-based templates for bare metal and PSYQo.
   - Settings directory is now passed to the emulator explicitly instead of relying on its working directory.

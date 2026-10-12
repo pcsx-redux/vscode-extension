@@ -246,6 +246,15 @@ exports.activate = (context) => {
   templates.setExtensionUri(context.extensionUri)
   pcsxRedux.setGlobalStorageUri(context.globalStorageUri)
   globalStorageUri = context.globalStorageUri
+  tools.applyToolchainPath(context.environmentVariableCollection)
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('psxDev.toolchainPath')) {
+        tools.applyToolchainPath()
+      }
+    })
+  )
 
   context.subscriptions.push(
     vscode.commands.registerCommand('psxDev.showPanel', () => {
