@@ -20,10 +20,17 @@ let globalStorageUri
 let requiresReboot = false
 
 async function checkInstalled(name) {
-  if (tools[name].installed === undefined) {
-    tools[name].installed = await tools[name].check()
+  const tool = tools[name]
+  if (tool.installed === undefined) {
+    if (tool.check) {
+      tool.installed = await tool.check()
+    } else if (tool.type === 'extension') {
+      tool.installed = vscode.extensions.getExtension(tool.id) !== undefined
+    } else if (tool.type === 'archive') {
+      tool.installed = await checkLocalFile(tool.filename)
+    }
   }
-  return tools[name].installed
+  return tool.installed
 }
 
 async function findCommand(commands, args) {
