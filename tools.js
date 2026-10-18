@@ -741,9 +741,9 @@ const tools = {
     name: 'Psy-Q SDK',
     description:
       'The original SDK made by Sony used to develop code for the PlayStation 1. Please note that you are not going to receive a license to use this SDK from Sony by downloading it, and so using it should be at your own risks.',
-    homepage: 'https://psx.arthus.net/sdk/Psy-Q/',
-    filename: 'psyq-4_7-converted-light.zip',
-    url: 'https://psx.arthus.net/sdk/Psy-Q/psyq-4_7-converted-light.zip',
+    homepage: 'https://github.com/pcsx-redux/psyq-converted',
+    filename: 'psyq-4_7-converted-light-v2.zip',
+    url: 'https://github.com/pcsx-redux/psyq-converted/releases/download/v4.7-2/psyq-4_7-converted-light-v2.zip',
     unpack: unpackPsyq
   },
   redux: {

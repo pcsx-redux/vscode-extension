@@ -20,6 +20,7 @@ The panel will have the ability to install the tools on the most popular platfor
 
 - Unreleased
   - Windows: the MIPS toolchain, GDB and make are unpacked into the extension's storage and put on PATH for VS Code's terminals and tasks through the new `psxDev.toolchainPath` setting. No reboot and no `mips.ps1` bootstrap.
+  - The Psy-Q libraries are rebuilt with the current converter and downloaded from pcsx-redux/psyq-converted. This fixes `rcos` and other table lookups, and adds the libgte functions the old archive was missing. Existing projects pick them up with "Restore Psy-Q".
 - 0.6.0
   - Added xmake-based templates for bare metal and PSYQo.
   - Settings directory is now passed to the emulator explicitly instead of relying on its working directory.
