@@ -18,6 +18,12 @@ The panel will have the ability to install the tools on the most popular platfor
 
 ### Changelog
 
+- 0.6.4
+  - Changelog entries for 0.6.2 and 0.6.3.
+- 0.6.3
+  - New extension icon.
+- 0.6.2
+  - The extension activates again on VS Code versions whose Node cannot `require()` ES modules (1.82 among them). It failed with `ERR_REQUIRE_ESM`, and every PSX.Dev command reported "not found". The GitHub release lookups now go through axios, and `@octokit/rest` is gone.
 - 0.6.1
   - Windows: the MIPS toolchain, GDB and make are unpacked into the extension's storage and put on PATH for VS Code's terminals and tasks through the new `psxDev.toolchainPath` setting. No reboot and no `mips.ps1` bootstrap.
   - The Psy-Q libraries are rebuilt with the current converter and downloaded from pcsx-redux/psyq-converted. This fixes `rcos` and other table lookups, and adds the libgte functions the old archive was missing. Existing projects pick them up with "Restore Psy-Q".
