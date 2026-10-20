@@ -11,11 +11,17 @@ const which = require('which')
 const downloader = require('./downloader.js')
 const unzipper = require('unzipper')
 const path = require('node:path')
-const { Octokit } = require('@octokit/rest')
-const octokit = new Octokit()
+const axios = require('axios')
 const os = require('node:os')
 
 const mipsVersion = '16.2.0'
+
+function githubApi(endpoint) {
+  return axios.get('https://api.github.com/repos/' + endpoint, {
+    headers: { Accept: 'application/vnd.github+json' }
+  })
+}
+
 let globalStorageUri
 let requiresReboot = false
 
@@ -359,10 +365,7 @@ async function installXMake() {
     return
   }
 
-  const release = await octokit.rest.repos.getLatestRelease({
-    owner: 'xmake-io',
-    repo: 'xmake'
-  })
+  const release = await githubApi('xmake-io/xmake/releases/latest')
   const wanted = 'xmake-bundle-' + release.data.tag_name + '.' + suffix
   const asset = release.data.assets.find((asset) => asset.name === wanted)
   if (!asset) {
@@ -382,10 +385,7 @@ async function installXMake() {
 async function installCMake() {
   switch (process.platform) {
     case 'win32':
-      const release = await octokit.rest.repos.getLatestRelease({
-        owner: 'Kitware',
-        repo: 'CMake'
-      })
+      const release = await githubApi('Kitware/CMake/releases/latest')
       const asset = release.data.assets.find((asset) => {
         return /^cmake-.*-windows-x86_64\.msi/.test(asset.name)
       })
@@ -458,10 +458,7 @@ async function installCMake() {
 async function installGit() {
   switch (process.platform) {
     case 'win32': {
-      const release = await octokit.rest.repos.getLatestRelease({
-        owner: 'git-for-windows',
-        repo: 'git'
-      })
+      const release = await githubApi('git-for-windows/git/releases/latest')
       const asset = release.data.assets.find((asset) => {
         return /^Git-.*-64-bit\.exe/.test(asset.name)
       })
@@ -497,10 +494,7 @@ async function installGit() {
 async function installPython() {
   switch (process.platform) {
     case 'win32':
-      const tags = await octokit.rest.repos.listTags({
-        owner: 'python',
-        repo: 'cpython'
-      })
+      const tags = await githubApi('python/cpython/tags')
       let latestVersion = [3, 12, 0]
       for (const release of tags.data) {
         const match = /v(3)\.([0-9]+)\.([0-9]+)$/.exec(release.name)

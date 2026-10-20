@@ -16,4 +16,5 @@ jobs:
           node-version: 24
       - run: npm i
       - run: npx eslint .
+      - run: xvfb-run -a npm test
       - run: npx @vscode/vsce package
