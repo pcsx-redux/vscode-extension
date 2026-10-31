@@ -55,6 +55,21 @@ async function checkCommands(commands, args) {
   return (await findCommand(commands, args)) !== null
 }
 
+// Debian's plain gdb only knows the host, and ships the MIPS-capable build as
+// gdb-multiarch. Arch has no gdb-multiarch, but its plain gdb is built with every
+// target. So on Linux, ask each candidate to switch to the R3000 rather than
+// trusting its name.
+async function findMipsGdb() {
+  if (process.platform === 'darwin') return findCommand(['gdb'], ['--version'])
+  if (process.platform !== 'linux') {
+    return findCommand(['gdb-multiarch'], ['--version'])
+  }
+  return findCommand(
+    ['gdb-multiarch', 'gdb'],
+    ['--batch', '-nx', '-ex', 'set architecture mips:3000']
+  )
+}
+
 // Windows gets the same prebuilt archives mips.ps1 installs, unpacked under the
 // extension's own storage, and psxDev.toolchainPath pointing at them. Its bin/
 // directory is put on PATH for the extension host and for every terminal and
@@ -134,6 +149,64 @@ async function installWin32Toolchain() {
   return win32ToolchainInstall
 }
 
+// Without brew there is no packaged mipsel-none-elf toolchain for most Linux
+// distributions (Arch's AUR packages are gone), so build it from source with
+// pcsx-redux's spawn-compiler.sh, installed under the extension's storage the
+// same way the Windows archives are.
+const spawnCompilerURL =
+  'https://raw.githubusercontent.com/pcsx-redux/pcsx-redux/main/tools/linux-mips/spawn-compiler.sh'
+
+// gcc's build and spawn-compiler.sh's unquoted PREFIX both break on a path with
+// spaces, which the storage path has under "Code - OSS".
+function linuxToolchainBase() {
+  const storage = globalStorageUri.fsPath
+  if (!/\s/.test(storage)) return storage
+  const base = path.join(os.homedir(), '.local', 'share', 'psx-dev')
+  if (/\s/.test(base)) {
+    throw new Error('No path without spaces to build the MIPS toolchain in.')
+  }
+  return base
+}
+
+let linuxToolchainBuild
+
+function buildLinuxToolchain() {
+  if (!linuxToolchainBuild) {
+    linuxToolchainBuild = runLinuxToolchainBuild().finally(() => {
+      linuxToolchainBuild = undefined
+    })
+  }
+  return linuxToolchainBuild
+}
+
+async function runLinuxToolchainBuild() {
+  if (await checkInstalled('pacman')) {
+    await terminal.run(
+      'sudo',
+      ['pacman', '-S', '--needed', 'base-devel', 'wget'],
+      { message: 'Installing the build dependencies requires root privileges.' }
+    )
+  } else if (await checkInstalled('apt')) {
+    await terminal.run('sudo', ['apt', 'install', 'build-essential', 'wget'], {
+      message: 'Installing the build dependencies requires root privileges.'
+    })
+  }
+  const base = linuxToolchainBase()
+  const root = path.join(base, 'mips', mipsVersion)
+  const build = path.join(base, 'mips-build')
+  const script = path.join(build, 'spawn-compiler.sh')
+  await fs.remove(build)
+  await downloader.downloadFile(spawnCompilerURL, script)
+  await terminal.run('sh', [script], {
+    cwd: build,
+    env: { PREFIX: root },
+    message: 'Building the MIPS toolchain from source. This takes a while.'
+  })
+  await fs.remove(build)
+  await setToolchainPath(root)
+  applyToolchainPath()
+}
+
 async function installToolchain() {
   switch (process.platform) {
     case 'win32':
@@ -148,23 +221,14 @@ async function installToolchain() {
       break
     case 'linux':
       try {
-        if (await checkInstalled('trizen')) {
-          await terminal.run('trizen', [
-            '-S',
-            'mipsel-none-elf-binutils',
-            'mipsel-none-elf-gcc'
-          ])
-        } else if (await checkInstalled('brew')) {
+        if (await checkInstalled('brew')) {
           await terminal.run('brew', [
             'install',
             'pcsx-redux/mips/mipsel-none-elf-binutils',
             'pcsx-redux/mips/mipsel-none-elf-gcc'
           ])
         } else {
-          vscode.window.showErrorMessage(
-            'Your Linux distribution is not supported. You can build the MIPS toolchain from source using tools/linux-mips/spawn-compiler.sh in the pcsx-redux repository.'
-          )
-          throw new Error('Unsupported platform')
+          await buildLinuxToolchain()
         }
       } catch (error) {
         vscode.window.showErrorMessage(
@@ -224,8 +288,10 @@ async function installGDB() {
           await terminal.run('sudo', ['apt', 'install', 'gdb-multiarch'], {
             message: 'Installing GDB Multiarch requires root privileges.'
           })
-        } else if (await checkInstalled('trizen')) {
-          await terminal.run('trizen', ['-S', 'gdb-multiarch'])
+        } else if (await checkInstalled('pacman')) {
+          await terminal.run('sudo', ['pacman', '-S', '--needed', 'gdb'], {
+            message: 'Installing GDB requires root privileges.'
+          })
         } else if (await checkInstalled('brew')) {
           await terminal.run('brew', ['install', 'gdb-multiarch'])
         } else {
@@ -626,6 +692,10 @@ const tools = {
     type: 'internal',
     check: () => checkCommands(['apt-get'], ['--version'])
   },
+  pacman: {
+    type: 'internal',
+    check: () => checkCommands(['pacman'], ['--version'])
+  },
   trizen: {
     type: 'internal',
     check: () => checkCommands(['trizen'], ['--version'])
@@ -652,10 +722,7 @@ const tools = {
     description: 'The tool to debug code for the PlayStation 1',
     homepage: 'https://www.sourceware.org/gdb/',
     install: installGDB,
-    check: () => checkCommands(
-      [(process.platform === 'darwin') ? 'gdb' : 'gdb-multiarch'],
-      ['--version']
-    )
+    check: async () => (await findMipsGdb()) !== null
   },
   make: {
     type: 'package',
@@ -799,6 +866,22 @@ exports.applyToolchainPath = (collection) => {
 }
 
 exports.findPython = findPython
+exports.findMipsGdb = findMipsGdb
+
+// The project templates' launch configurations call gdb-multiarch on Linux. Where
+// the MIPS-capable gdb has another name (plain gdb on Arch), substitute it when the
+// session starts, so nothing machine-specific is written into the project.
+exports.resolveMipsGdb = async (configuration) => {
+  if (
+    process.platform === 'linux' &&
+    configuration.miDebuggerPath === 'gdb-multiarch' &&
+    !(await checkCommands(['gdb-multiarch'], ['--version']))
+  ) {
+    const gdb = await findMipsGdb()
+    if (gdb) configuration.miDebuggerPath = gdb
+  }
+  return configuration
+}
 
 exports.install = async (toInstall, force) => {
   if (requiresReboot) {

@@ -18,6 +18,10 @@ The panel will have the ability to install the tools on the most popular platfor
 
 ### Changelog
 
+- 0.6.5
+  - Linux: GDB is found by asking it to debug MIPS, so Arch's plain `gdb`, which supports every architecture, now counts. Launch configurations calling `gdb-multiarch` use it instead when gdb-multiarch is absent, and the panel installs it with pacman.
+  - Linux without brew: the MIPS toolchain is built from source with pcsx-redux's `spawn-compiler.sh` into the extension's storage and put on PATH through `psxDev.toolchainPath`. The AUR packages it used to install are gone.
+  - The PSYQo cube templates double-buffer their quad fragments.
 - 0.6.4
   - Changelog entries for 0.6.2 and 0.6.3.
 - 0.6.3

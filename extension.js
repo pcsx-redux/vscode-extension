@@ -249,6 +249,13 @@ exports.activate = (context) => {
   tools.applyToolchainPath(context.environmentVariableCollection)
 
   context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider('cppdbg', {
+      resolveDebugConfiguration: (folder, configuration) =>
+        tools.resolveMipsGdb(configuration)
+    })
+  )
+
+  context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('psxDev.toolchainPath')) {
         tools.applyToolchainPath()
