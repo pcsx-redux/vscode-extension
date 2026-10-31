@@ -667,6 +667,21 @@ const netyarozeTemplate = combine(psyqTemplate, {
 })
 /* eslint-enable no-template-curly-in-string */
 
+// The launch configurations call gdb-multiarch on Linux. Where the MIPS-capable
+// gdb has another name (plain gdb on Arch), point the linux section at it.
+async function withLinuxGdb(content) {
+  if (process.platform !== 'linux') return content
+  const gdb = await tools.findMipsGdb()
+  if (!gdb || gdb === 'gdb-multiarch') return content
+  const patched = JSON.parse(JSON.stringify(content))
+  for (const configuration of patched.configurations) {
+    if (configuration.miDebuggerPath === 'gdb-multiarch') {
+      configuration.linux = { miDebuggerPath: gdb }
+    }
+  }
+  return patched
+}
+
 async function createGitRepository(fullPath, template, progressReporter) {
   progressReporter.report({ message: 'Generating files...' })
   await fs.mkdirp(fullPath)
@@ -677,7 +692,11 @@ async function createGitRepository(fullPath, template, progressReporter) {
       await fs.mkdirp(path.join(fullPath, path.dirname(file.name)))
       const fileFullPath = path.join(fullPath, file.name)
       if (file.type === 'json') {
-        await fs.writeFile(fileFullPath, JSON.stringify(file.content, null, 2))
+        let content = file.content
+        if (file.name === '.vscode/launch.json') {
+          content = await withLinuxGdb(content)
+        }
+        await fs.writeFile(fileFullPath, JSON.stringify(content, null, 2))
       } else if (file.type === 'text') {
         await fs.writeFile(fileFullPath, file.content)
       } else if (file.type === 'textarray') {

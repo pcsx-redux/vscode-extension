@@ -17,7 +17,8 @@ exports.run = async function (binary, args, options) {
     shellArgs: args,
     name,
     message,
-    cwd: options.cwd
+    cwd: options.cwd,
+    env: options.env
   })
   terminal.show()
   let resolver
