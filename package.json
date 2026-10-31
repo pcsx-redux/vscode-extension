@@ -21,7 +21,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onDebugResolve:cppdbg"
   ],
   "main": "./extension.js",
   "contributes": {

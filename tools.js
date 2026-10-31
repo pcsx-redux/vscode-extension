@@ -156,7 +156,30 @@ async function installWin32Toolchain() {
 const spawnCompilerURL =
   'https://raw.githubusercontent.com/pcsx-redux/pcsx-redux/main/tools/linux-mips/spawn-compiler.sh'
 
-async function buildLinuxToolchain() {
+// gcc's build and spawn-compiler.sh's unquoted PREFIX both break on a path with
+// spaces, which the storage path has under "Code - OSS".
+function linuxToolchainBase() {
+  const storage = globalStorageUri.fsPath
+  if (!/\s/.test(storage)) return storage
+  const base = path.join(os.homedir(), '.local', 'share', 'psx-dev')
+  if (/\s/.test(base)) {
+    throw new Error('No path without spaces to build the MIPS toolchain in.')
+  }
+  return base
+}
+
+let linuxToolchainBuild
+
+function buildLinuxToolchain() {
+  if (!linuxToolchainBuild) {
+    linuxToolchainBuild = runLinuxToolchainBuild().finally(() => {
+      linuxToolchainBuild = undefined
+    })
+  }
+  return linuxToolchainBuild
+}
+
+async function runLinuxToolchainBuild() {
   if (await checkInstalled('pacman')) {
     await terminal.run(
       'sudo',
@@ -168,8 +191,9 @@ async function buildLinuxToolchain() {
       message: 'Installing the build dependencies requires root privileges.'
     })
   }
-  const root = vscode.Uri.joinPath(globalStorageUri, 'mips', mipsVersion).fsPath
-  const build = vscode.Uri.joinPath(globalStorageUri, 'mips-build').fsPath
+  const base = linuxToolchainBase()
+  const root = path.join(base, 'mips', mipsVersion)
+  const build = path.join(base, 'mips-build')
   const script = path.join(build, 'spawn-compiler.sh')
   await fs.remove(build)
   await downloader.downloadFile(spawnCompilerURL, script)
@@ -843,6 +867,21 @@ exports.applyToolchainPath = (collection) => {
 
 exports.findPython = findPython
 exports.findMipsGdb = findMipsGdb
+
+// The project templates' launch configurations call gdb-multiarch on Linux. Where
+// the MIPS-capable gdb has another name (plain gdb on Arch), substitute it when the
+// session starts, so nothing machine-specific is written into the project.
+exports.resolveMipsGdb = async (configuration) => {
+  if (
+    process.platform === 'linux' &&
+    configuration.miDebuggerPath === 'gdb-multiarch' &&
+    !(await checkCommands(['gdb-multiarch'], ['--version']))
+  ) {
+    const gdb = await findMipsGdb()
+    if (gdb) configuration.miDebuggerPath = gdb
+  }
+  return configuration
+}
 
 exports.install = async (toInstall, force) => {
   if (requiresReboot) {
